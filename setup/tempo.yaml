@@ -1,0 +1,12 @@
+tempo:
+  reportingEnabled: false
+
+storage:
+  trace:
+    backend: local
+
+persistence:
+  enabled: false
+
+tempoQuery:
+  enabled: false

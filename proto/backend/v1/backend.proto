@@ -1,0 +1,17 @@
+syntax = "proto3";
+
+package backend.v1;
+
+option go_package = "github.com/johnknl/otel-sandbox/pkg/protogen/backend/v1;backendv1";
+
+service BackendService {
+  rpc GetMessage(GetMessageRequest) returns (GetMessageResponse);
+}
+
+message GetMessageRequest {
+  string name = 1;
+}
+
+message GetMessageResponse {
+  string message = 1;
+}

@@ -1,0 +1,30 @@
+## Configure grafana datasources
+## ref: http://docs.grafana.org/administration/provisioning/#datasources
+##
+datasources:
+ datasources.yaml:
+   apiVersion: 1
+   datasources:
+    - name: Tempo
+      type: tempo
+      access: proxy
+      url: http://tempo:3200
+      jsonData:
+        tracesToLogs:
+          datasourceUid: ""
+    # - name: Prometheus
+    #   type: prometheus
+    #   url: http://prometheus-prometheus-server
+    #   access: proxy
+    #   isDefault: true
+    # - name: CloudWatch
+    #   type: cloudwatch
+    #   access: proxy
+    #   uid: cloudwatch
+    #   editable: false
+    #   jsonData:
+    #     authType: default
+    #     defaultRegion: us-east-1
+   # deleteDatasources:
+   #  - name: Prometheus
+

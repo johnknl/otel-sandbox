@@ -1,0 +1,12 @@
+manager:
+  # autoInstrumentationImage:
+    # To enable Go instrumentation, manager.autoInstrumentation.go.enabled must be set to true
+    # go:
+    #   repository: ""
+    #   tag: ""
+
+  # The Go instrumentation support in the operator is disabled by default.
+  autoInstrumentation:
+    go:
+      enabled: true
+

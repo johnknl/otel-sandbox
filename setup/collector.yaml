@@ -1,0 +1,64 @@
+apiVersion: opentelemetry.io/v1beta1
+kind: OpenTelemetryCollector
+metadata:
+  name: otel
+  namespace: default
+
+spec:
+  mode: deployment
+
+  config:
+    receivers:
+      otlp:
+        protocols:
+          grpc: {}
+          http: {}
+
+    processors:
+      memory_limiter:
+        check_interval: 5s
+        limit_percentage: 80
+        spike_limit_percentage: 25
+
+      batch: {}
+
+    exporters:
+      debug:
+        verbosity: detailed
+      otlp:
+        endpoint: tempo:4317
+        tls:
+          insecure: true
+
+    service:
+      pipelines:
+        traces:
+          receivers: [otlp]
+          processors:
+            - memory_limiter
+            - batch
+          exporters:
+            - otlp
+            - debug
+
+---
+apiVersion: opentelemetry.io/v1alpha1
+kind: Instrumentation
+metadata:
+  name: go-auto-instrumentation
+  namespace: default
+
+spec:
+  exporter:
+    endpoint: http://otel-collector:4318
+
+  propagators:
+    - tracecontext
+    - baggage
+
+  sampler:
+    type: parentbased_traceidratio
+    argument: "1"
+
+  go:
+    image: ghcr.io/open-telemetry/opentelemetry-go-instrumentation/autoinstrumentation-go:v0.24.0

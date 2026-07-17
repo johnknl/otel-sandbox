@@ -1,0 +1,24 @@
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: backend
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: backend
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: backend
+      annotations:
+        instrumentation.opentelemetry.io/inject-go: "go-auto-instrumentation"
+        instrumentation.opentelemetry.io/otel-go-auto-target-exe: "/backend"
+    spec:
+      containers:
+      - name: backend
+        image: localhost:32000/backend:latest
+        ports:
+        - containerPort: 50051
+

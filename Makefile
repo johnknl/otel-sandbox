@@ -1,8 +1,10 @@
 BIN_DIR=$(CURDIR)/bin
-CLUSTER ?= otel-sandbox
+CLUSTER = otel-sandbox
 KUBE_CONTEXT=$(CLUSTER)
-REGISTRY ?= 10.0.0.1:5000
-REGISTRY_PUSH ?= 127.0.0.1:5000
+REGISTRY = 10.0.0.1:5000
+REGISTRY_PUSH := 127.0.0.1:5000
+GRAFANA_NODEPORT := 30030
+AKHQ_NODEPORT := 30181
 PROTO_SRCS := $(shell find proto/ -type f -name '*.proto')
 MODULE := $(shell go list -m)
 KUBECTL=kubectl --context $(KUBE_CONTEXT)
@@ -11,6 +13,9 @@ HELM=helm --kube-context $(KUBE_CONTEXT)
 PROTOC_VERSION=34.1
 PROTOC_SHA256=af27ea66cd26938fe48587804ca7d4817457a08350021a1c6e23a27ccc8c6904 
 PROTOC_ZIP=protoc-$(PROTOC_VERSION)-linux-x86_64.zip
+
+#  get random (first) node IP address to access NodePort services
+NODE_IP ?= $(shell $(KUBECTL) get nodes -o jsonpath='{.items[0].status.addresses[?(@.type=="InternalIP")].address}')
 
 .PHONY: help
 help: ## Show available targets
@@ -91,13 +96,10 @@ ns: ## Create the sandbox namespace
   	pod-security.kubernetes.io/audit=privileged \
   	pod-security.kubernetes.io/warn=privileged
 
-.PHONY: grafana-forward
-grafana-forward: ## Forward the Grafana service to localhost:3000
-	$(KUBECTL) -n sandbox port-forward svc/grafana 3000:80
-
-.PHONY:
-akhq-forward: ## Forward the AKHQ service to localhost:8181
-	$(KUBECTL) -n sandbox port-forward svc/akhq 8181:80
+.PHONY: open
+open: ## Open the Grafana and AKHQ dashboards in the browser
+	xdg-open "http://$(NODE_IP):$(GRAFANA_NODEPORT)" || true
+	xdg-open "http://$(NODE_IP):$(AKHQ_NODEPORT)" || true
 
 .PHONY: setup
 setup: ns ## Prepare the cluster
@@ -138,6 +140,11 @@ setup: ns ## Prepare the cluster
 
 	$(KUBECTL) apply -n sandbox -f setup/collector.yaml
 
+	## Patch the Grafana and AKHQ services to use NodePort with the specified ports
+	$(KUBECTL) -n sandbox patch svc grafana --type merge -p '{"spec":{"type":"NodePort"}}'
+	$(KUBECTL) -n sandbox patch svc grafana --type json -p='[{"op":"replace","path":"/spec/ports/0/nodePort","value":$(GRAFANA_NODEPORT)}]'
+	$(KUBECTL) -n sandbox patch svc akhq --type merge -p '{"spec":{"type":"NodePort"}}'
+	$(KUBECTL) -n sandbox patch svc akhq --type json -p='[{"op":"replace","path":"/spec/ports/0/nodePort","value":$(AKHQ_NODEPORT)}]'
 
 .PHONY: cluster
 cluster: .state/disks/$(CLUSTER) ## Create the Talos cluster

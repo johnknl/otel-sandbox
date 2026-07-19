@@ -1,8 +1,13 @@
 BIN_DIR=$(CURDIR)/bin
-REGISTRY=localhost:32000
-MK8S=$(shell which microk8s)
+CLUSTER ?= otel-sandbox
+KUBE_CONTEXT=$(CLUSTER)
+REGISTRY ?= 10.0.0.1:5000
+REGISTRY_PUSH ?= 127.0.0.1:5000
 PROTO_SRCS := $(shell find proto/ -type f -name '*.proto')
 MODULE := $(shell go list -m)
+KUBECTL=kubectl --context $(KUBE_CONTEXT)
+HELM=helm --kube-context $(KUBE_CONTEXT)
+
 PROTOC_VERSION=34.1
 PROTOC_SHA256=af27ea66cd26938fe48587804ca7d4817457a08350021a1c6e23a27ccc8c6904 
 PROTOC_ZIP=protoc-$(PROTOC_VERSION)-linux-x86_64.zip
@@ -12,15 +17,31 @@ help: ## Show available targets
 	@awk 'BEGIN {FS = ":.*## "; printf "Available targets:\n"} /^[a-zA-Z0-9_.%\/-]+:.*## / {printf "  make %-14s %s\n", $$1, $$2}' $(MAKEFILE_LIST)
 
 .PHONY: build
-build: services ## Alias for services target
+build: proto registry ## Build and push the services to the registry
+	docker build -t $(REGISTRY_PUSH)/backend:latest --target backend .
+	docker build -t $(REGISTRY_PUSH)/frontend:latest --target frontend .
+	docker build -t $(REGISTRY_PUSH)/consumer:latest --target consumer .
+
+	docker push $(REGISTRY_PUSH)/backend:latest
+	docker push $(REGISTRY_PUSH)/frontend:latest
+	docker push $(REGISTRY_PUSH)/consumer:latest
+
+# This is a bit of pain but otherwise we have to setup TLS or add extra host
+# Docker setup to configure insecure-resitries in daemon.json. We do configure
+# Talos to allow insecure traffic with thevm network bridge gateway.
+.PHONY: registry
+registry: ## Run local container registry on :5000
+	@docker rm -f otel-sandbox-registry >/dev/null 2>&1 || true
+	@docker run -d --restart=always \
+		--network host \
+		-e REGISTRY_HTTP_ADDR=0.0.0.0:5000 \
+		--name otel-sandbox-registry \
+		registry:2 >/dev/null
 
 .PHONY: services
-services: proto ## Build and push the services
-	docker build -t $(REGISTRY)/backend:latest --target backend .
-	docker build -t $(REGISTRY)/frontend:latest --target frontend .
-
-	docker push $(REGISTRY)/backend:latest
-	docker push $(REGISTRY)/frontend:latest
+services: ns build ## Update the services
+	$(KUBECTL) apply -n sandbox -k deploy/
+	$(KUBECTL) -n sandbox rollout restart deployment frontend backend consumer
 
 .PHONY: proto
 proto: tools ### Generate Go code from proto files
@@ -58,43 +79,76 @@ tools: bin/protoc ## Build and install tools defined in tools/tools.go to $(BIN_
 		GOBIN="$(BIN_DIR)" go -C tools install $$tool; \
 	done
 
-.PHONY: up
-up: build setup ## 'up' the system
-	$(MK8S) kubectl apply -k deploy/
+.PHONY: ns
+ns: ## Create the sandbox namespace
+	$(KUBECTL) create ns sandbox || true
 
-	# do a possibly redundant recreation of the pods 
-	$(MK8S) kubectl rollout restart deployment frontend backend
+	# Talos by default enforces the pod security admission controller 
+	# on all namespaces, but this is not a security testing sandbox
+	# so we'll just bypass that 👌.
+	$(KUBECTL) label ns sandbox \
+  	pod-security.kubernetes.io/enforce=privileged \
+  	pod-security.kubernetes.io/audit=privileged \
+  	pod-security.kubernetes.io/warn=privileged
 
-	$(MK8S) kubectl port-forward svc/grafana 3000:80
+.PHONY: grafana-forward
+grafana-forward: ## Forward the Grafana service to localhost:3000
+	$(KUBECTL) -n sandbox port-forward svc/grafana 3000:80
+
+.PHONY:
+akhq-forward: ## Forward the AKHQ service to localhost:8181
+	$(KUBECTL) -n sandbox port-forward svc/akhq 8181:80
 
 .PHONY: setup
-setup: ## Prepare the cluster
-	$(MK8S) enable dns registry helm3 cert-manager
+setup: ns ## Prepare the cluster
+	$(HELM) repo add grafana-community https://grafana-community.github.io/helm-charts
+	$(HELM) repo add open-telemetry https://open-telemetry.github.io/opentelemetry-helm-charts
+	$(HELM) repo add jetstack https://charts.jetstack.io
+	$(HELM) repo add strimzi https://strimzi.io/charts/
+	$(HELM) repo add akhq https://akhq.io/
+	$(HELM) repo update
 
-	$(MK8S) helm3 repo add grafana-community https://grafana-community.github.io/helm-charts
-	$(MK8S) helm3 repo add open-telemetry https://open-telemetry.github.io/opentelemetry-helm-charts
-	$(MK8S) helm3 repo add strimzi https://strimzi.io/charts/
+	$(HELM) upgrade --wait --install cert-manager jetstack/cert-manager \
+		-n cert-manager \
+		--create-namespace \
+		--set crds.enabled=true
 
-	$(MK8S) helm3 repo update
+	$(HELM) upgrade --wait --install tempo grafana-community/tempo \
+   	-n sandbox \
+   	-f setup/tempo.yaml
 
-	#
-	# just stuff everything in the default namespace for convenience
-	#
-	
-	$(MK8S) helm3 upgrade --wait --install tempo grafana-community/tempo \
-  	-n default \
-  	-f setup/tempo.yaml
+	$(HELM) upgrade --wait --install grafana grafana-community/grafana \
+  	-n sandbox \
+  	-f setup/grafana.yaml \
+   	--set adminPassword=admin
 
-	$(MK8S) helm3 upgrade --wait --install grafana grafana-community/grafana \
-  	-n default \
-  	-f setup/grafana.yaml
+	$(HELM) upgrade --wait --install strimzi strimzi/strimzi-kafka-operator \
+  	-n sandbox
 
-	$(MK8s) helm3 upgrade --wait --install strimzi strimzi/strimzi-kafka-operator \
-  	-n default
+	$(KUBECTL) apply -f setup/kafka.yaml -n sandbox
 
-	$(MK8S) helm3 upgrade --wait --install otel-operator \
+	$(HELM) upgrade --wait --install otel-operator \
   		open-telemetry/opentelemetry-operator \
-  	-n default \
+  	-n sandbox \
   	-f setup/operator.yaml
 
-	$(MK8S) kubectl apply -f setup/collector.yaml
+	$(HELM) upgrade --install akhq akhq/akhq \
+  		-n sandbox \
+  		-f setup/akhq.yaml
+
+	$(KUBECTL) apply -n sandbox -f setup/collector.yaml
+
+
+.PHONY: cluster
+cluster: .state/disks/$(CLUSTER) ## Create the Talos cluster
+
+.state/disks/$(CLUSTER):
+	./talos/cluster.sh create
+
+
+.PHONY: up
+up: cluster ns setup services ## Bring everything up 
+
+.PHONY: down
+down: ## Tear down the cluster
+	./talos/cluster.sh destroy

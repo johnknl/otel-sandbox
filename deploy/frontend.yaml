@@ -17,4 +17,4 @@ spec:
     spec:
       containers:
       - name: frontend
-        image: localhost:32000/frontend:latest
+        image: 10.0.0.1:5000/frontend:latest

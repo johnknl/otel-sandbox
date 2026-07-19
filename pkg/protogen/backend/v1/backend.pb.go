@@ -24,6 +24,7 @@ const (
 type GetMessageRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Name          string                 `protobuf:"bytes,1,opt,name=name,proto3" json:"name,omitempty"`
+	Id            string                 `protobuf:"bytes,2,opt,name=id,proto3" json:"id,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -65,9 +66,17 @@ func (x *GetMessageRequest) GetName() string {
 	return ""
 }
 
+func (x *GetMessageRequest) GetId() string {
+	if x != nil {
+		return x.Id
+	}
+	return ""
+}
+
 type GetMessageResponse struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Message       string                 `protobuf:"bytes,1,opt,name=message,proto3" json:"message,omitempty"`
+	Id            string                 `protobuf:"bytes,2,opt,name=id,proto3" json:"id,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -109,16 +118,25 @@ func (x *GetMessageResponse) GetMessage() string {
 	return ""
 }
 
+func (x *GetMessageResponse) GetId() string {
+	if x != nil {
+		return x.Id
+	}
+	return ""
+}
+
 var File_proto_backend_v1_backend_proto protoreflect.FileDescriptor
 
 const file_proto_backend_v1_backend_proto_rawDesc = "" +
 	"\n" +
 	"\x1eproto/backend/v1/backend.proto\x12\n" +
-	"backend.v1\"'\n" +
+	"backend.v1\"7\n" +
 	"\x11GetMessageRequest\x12\x12\n" +
-	"\x04name\x18\x01 \x01(\tR\x04name\".\n" +
+	"\x04name\x18\x01 \x01(\tR\x04name\x12\x0e\n" +
+	"\x02id\x18\x02 \x01(\tR\x02id\">\n" +
 	"\x12GetMessageResponse\x12\x18\n" +
-	"\amessage\x18\x01 \x01(\tR\amessage2]\n" +
+	"\amessage\x18\x01 \x01(\tR\amessage\x12\x0e\n" +
+	"\x02id\x18\x02 \x01(\tR\x02id2]\n" +
 	"\x0eBackendService\x12K\n" +
 	"\n" +
 	"GetMessage\x12\x1d.backend.v1.GetMessageRequest\x1a\x1e.backend.v1.GetMessageResponseBCZAgithub.com/johnknl/otel-sandbox/pkg/protogen/backend/v1;backendv1b\x06proto3"

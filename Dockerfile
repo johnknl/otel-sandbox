@@ -34,6 +34,6 @@ RUN go build -o /consumer ./services/consumer/
 
 FROM ubuntu:24.04 AS consumer
 
-COPY --from=build-backend /backend /backend
+COPY --from=build-consumer /consumer /consumer
 
-ENTRYPOINT ["/backend"]
+ENTRYPOINT ["/consumer"]

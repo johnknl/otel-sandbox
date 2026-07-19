@@ -42,16 +42,23 @@ func main() {
 	ctx := context.Background()
 
 	r := kafka.NewReader(kafka.ReaderConfig{
-		Brokers:  []string{"test-kafka-kafka-bootstrap.kafka.svc:9092"},
+		Brokers:  []string{"kafka-otel-sandbox-kafka-bootstrap:9092"},
 		Topic:    "a-topic",
 		GroupID:  "consumer-group",
 		MaxBytes: 10 << 20, // 10MB
 	})
 
+	defer func() {
+		if err := r.Close(); err != nil {
+			logger.ErrorContext(ctx, "failed to close reader", "err", err)
+		}
+	}()
+
 	for {
-		m, err := r.FetchMessage(context.Background())
+		m, err := r.FetchMessage(ctx)
 		if err != nil {
-			break
+			logger.ErrorContext(ctx, "failed to fetch message", "err", err)
+			os.Exit(1)
 		}
 
 		logger.DebugContext(ctx, string(m.Value), "topic", m.Topic, "partition", m.Partition, "offset", m.Offset)
@@ -60,10 +67,5 @@ func main() {
 			logger.ErrorContext(ctx, "failed to commit message", "err", err)
 			os.Exit(1)
 		}
-	}
-
-	if err := r.Close(); err != nil {
-		logger.ErrorContext(ctx, "failed to close reader", "err", err)
-		os.Exit(1)
 	}
 }

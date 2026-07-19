@@ -1,0 +1,47 @@
+<domain type="kvm">
+  <name>@NAME@</name>
+
+  <memory unit="MiB">4096</memory>
+  <currentMemory unit="MiB">4096</currentMemory>
+  <vcpu placement="static">2</vcpu>
+
+  <os>
+    <type arch="x86_64" machine="q35">hvm</type>
+    <boot dev="hd"/>
+    <boot dev="cdrom"/>
+  </os>
+
+  <features>
+    <acpi/>
+    <apic/>
+  </features>
+
+  <cpu mode="host-passthrough" check="none"/>
+
+  <devices>
+    <disk type="file" device="disk">
+      <driver name="qemu" type="qcow2"/>
+      <source file="@DISK_PATH@"/>
+      <target dev="vda" bus="virtio"/>
+    </disk>
+
+    <disk type="file" device="cdrom">
+      <driver name="qemu" type="raw"/>
+      <source file="@ISO_PATH@"/>
+      <target dev="sda" bus="sata"/>
+      <readonly/>
+    </disk>
+
+    <interface type="network">
+      <source network="@NETWORK_NAME@"/>
+      <model type="virtio"/>
+    </interface>
+
+    <serial type="pty">
+      <target type="isa-serial" port="0"/>
+    </serial>
+    <console type="pty">
+      <target type="serial" port="0"/>
+    </console>
+  </devices>
+</domain>

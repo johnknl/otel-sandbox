@@ -10,8 +10,10 @@ service BackendService {
 
 message GetMessageRequest {
   string name = 1;
+  string id = 2;
 }
 
 message GetMessageResponse {
   string message = 1;
+  string id = 2;
 }

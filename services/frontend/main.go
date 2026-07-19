@@ -27,6 +27,8 @@ import (
 	"log/slog"
 	"time"
 
+	"github.com/google/uuid"
+	"github.com/jaswdr/faker"
 	pb "github.com/johnknl/otel-sandbox/pkg/protogen/backend/v1"
 	"go.opentelemetry.io/otel"
 
@@ -50,21 +52,28 @@ func main() {
 		),
 	)
 	if err != nil {
-		log.Fatal(err)
+		panic(err)
 	}
 
+	fake := faker.New()
 	client := pb.NewBackendServiceClient(conn)
 	ticker := time.NewTicker(5 * time.Second)
 
 	for range ticker.C {
 		ctx := context.Background()
 
+		v7, err := uuid.NewV7()
+		if err != nil {
+			panic(err)
+		}
+
 		tracer := otel.Tracer("frontend")
 
 		ctx, span := tracer.Start(ctx, "service.call_backend")
 
 		resp, err := client.GetMessage(ctx, &pb.GetMessageRequest{
-			Name: "otel",
+			Name: fake.Person().Name(),
+			Id:   v7.String(),
 		})
 
 		span.End()

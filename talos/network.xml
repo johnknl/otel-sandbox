@@ -1,0 +1,12 @@
+<network>
+  <name>otel-sandbox-net</name>
+  <bridge name="otel-sandbox-br" stp="on" delay="0"/>
+  <forward mode="nat">
+    <nat/>
+  </forward>
+  <ip address="10.0.0.1" netmask="255.255.255.0">
+    <dhcp>
+      <range start="10.0.0.100" end="10.0.0.200"/>
+    </dhcp>
+  </ip>
+</network>

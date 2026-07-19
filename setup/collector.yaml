@@ -2,7 +2,6 @@ apiVersion: opentelemetry.io/v1beta1
 kind: OpenTelemetryCollector
 metadata:
   name: otel
-  namespace: default
 
 spec:
   mode: deployment
@@ -46,7 +45,6 @@ apiVersion: opentelemetry.io/v1alpha1
 kind: Instrumentation
 metadata:
   name: go-auto-instrumentation
-  namespace: default
 
 spec:
   exporter:

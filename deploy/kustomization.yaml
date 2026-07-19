@@ -9,3 +9,4 @@ commonLabels:
 resources:
 - backend/
 - frontend.yaml
+- consumer.yaml

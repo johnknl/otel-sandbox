@@ -1,0 +1,6 @@
+configuration:
+  akhq:
+    connections:
+      sandbox:
+        properties:
+          bootstrap.servers: kafka-otel-sandbox-kafka-bootstrap:9092

@@ -21,11 +21,13 @@ ISO_NAME="metal-amd64-${TALOS_VERSION}.iso"
 ISO_PATH="${CACHE_DIR}/${ISO_NAME}"
 ISO_URL="https://github.com/siderolabs/talos/releases/download/${TALOS_VERSION}/metal-amd64.iso"
 REGISTRY_ENDPOINT="10.0.0.1:5000"
+CONTROL_PLANE_PATCH_FILE="talos/configpatch-controlplane.yaml"
+WORKER_PATCH_FILE="talos/configpatch-worker.yaml"
 
-CP_VCPUS="2"
-CP_RAM_MB="4096"
-WORKER_VCPUS="2"
-WORKER_RAM_MB="4096"
+CP_VCPUS="8"
+CP_RAM_MB="8192"
+WORKER_VCPUS="16"
+WORKER_RAM_MB="32768"
 DISK_SIZE_GB="40"
 INSTALL_DISK="/dev/vda"
 OS_VARIANT="linux2022"
@@ -215,12 +217,15 @@ create_cluster() {
 
   rm -rf "${CONFIG_DIR}"
   mkdir -p "${CONFIG_DIR}"
+
   log "Generating Talos machine configuration"
   talosctl gen config \
     "${CLUSTER_NAME}" \
     "https://${bootstrap_ip}:6443" \
     --install-disk "${INSTALL_DISK}" \
     --registry-mirror "${REGISTRY_ENDPOINT}=http://${REGISTRY_ENDPOINT}" \
+    --config-patch-control-plane "@${CONTROL_PLANE_PATCH_FILE}" \
+    --config-patch-worker "@${WORKER_PATCH_FILE}" \
     --output-dir "${CONFIG_DIR}"
 
   log "Applying control-plane configurations"
@@ -252,7 +257,9 @@ create_cluster() {
   talosctl --talosconfig "${cluster_talosconfig}" --context "${CLUSTER_NAME}" --nodes "${bootstrap_ip}" kubeconfig --force --force-context-name "${CLUSTER_NAME}"
 
   log "Refreshing Talos context in default talosconfig"
-  talosctl config remove -y "${CLUSTER_NAME}" >/dev/null 2>&1 || true
+  if [[ -f "${HOME}/.talos/config" ]]; then
+    yq -i "del(.contexts.\"${CLUSTER_NAME}\")" "${HOME}/.talos/config"
+  fi
   talosctl config merge "${cluster_talosconfig}" >/dev/null
   talosctl config context "${CLUSTER_NAME}" >/dev/null
   talosctl config endpoint "${cp_ips[@]}" >/dev/null

@@ -5,6 +5,7 @@ REGISTRY = 10.0.0.1:5000
 REGISTRY_PUSH := 127.0.0.1:5000
 GRAFANA_NODEPORT := 30030
 AKHQ_NODEPORT := 30181
+JAEGER_NODEPORT := 30686
 PROTO_SRCS := $(shell find proto/ -type f -name '*.proto')
 MODULE := $(shell go list -m)
 KUBECTL=kubectl --context $(KUBE_CONTEXT)
@@ -21,15 +22,30 @@ NODE_IP ?= $(shell $(KUBECTL) get nodes -o jsonpath='{.items[0].status.addresses
 help: ## Show available targets
 	@awk 'BEGIN {FS = ":.*## "; printf "Available targets:\n"} /^[a-zA-Z0-9_.%\/-]+:.*## / {printf "  make %-14s %s\n", $$1, $$2}' $(MAKEFILE_LIST)
 
+.PHONY: consumer
+consumer: ## Build, push and rollout the consumer service
+	$(MAKE) build-consumer
+	$(KUBECTL) -n sandbox rollout restart deployment consumer
+
+.PHONY: backend
+backend: ## Build, push and rollout the backend service
+	$(MAKE) build-backend
+	$(KUBECTL) -n sandbox rollout restart deployment backend
+
+.PHONY: frontend
+frontend: ## Build, push and rollout the frontend service
+	$(MAKE) build-frontend
+	$(KUBECTL) -n sandbox rollout restart deployment frontend
+
+build-%:
+	docker build -t $(REGISTRY_PUSH)/$*:latest --target $* .
+	docker push $(REGISTRY_PUSH)/$*:latest
+
 .PHONY: build
 build: proto registry ## Build and push the services to the registry
-	docker build -t $(REGISTRY_PUSH)/backend:latest --target backend .
-	docker build -t $(REGISTRY_PUSH)/frontend:latest --target frontend .
-	docker build -t $(REGISTRY_PUSH)/consumer:latest --target consumer .
-
-	docker push $(REGISTRY_PUSH)/backend:latest
-	docker push $(REGISTRY_PUSH)/frontend:latest
-	docker push $(REGISTRY_PUSH)/consumer:latest
+	make build-frontend
+	make build-backend
+	make build-consumer
 
 # This is a bit of pain but otherwise we have to setup TLS or add extra host
 # Docker setup to configure insecure-resitries in daemon.json. We do configure
@@ -97,13 +113,19 @@ ns: ## Create the sandbox namespace
   	pod-security.kubernetes.io/warn=privileged
 
 .PHONY: open
-open: ## Open the Grafana and AKHQ dashboards in the browser
+open: ## Open the Grafana, AKHQ, and Jaeger UIs
 	xdg-open "http://$(NODE_IP):$(GRAFANA_NODEPORT)" || true
 	xdg-open "http://$(NODE_IP):$(AKHQ_NODEPORT)" || true
+	xdg-open "http://$(NODE_IP):$(JAEGER_NODEPORT)" || true
 
 .PHONY: setup
 setup: ns ## Prepare the cluster
+	# this can be done at talos bootstrap but it requires custom config and is easier to do afterwards
+	$(KUBECTL) apply -f https://raw.githubusercontent.com/alex1989hu/kubelet-serving-cert-approver/main/deploy/standalone-install.yaml
+	$(KUBECTL) apply -f https://github.com/kubernetes-sigs/metrics-server/releases/latest/download/components.yaml
+
 	$(HELM) repo add grafana-community https://grafana-community.github.io/helm-charts
+	$(HELM) repo add jaegertracing https://jaegertracing.github.io/helm-charts
 	$(HELM) repo add open-telemetry https://open-telemetry.github.io/opentelemetry-helm-charts
 	$(HELM) repo add jetstack https://charts.jetstack.io
 	$(HELM) repo add strimzi https://strimzi.io/charts/
@@ -116,8 +138,12 @@ setup: ns ## Prepare the cluster
 		--set crds.enabled=true
 
 	$(HELM) upgrade --wait --install tempo grafana-community/tempo \
-   	-n sandbox \
-   	-f setup/tempo.yaml
+    	-n sandbox \
+    	-f setup/tempo.yaml
+
+	$(HELM) upgrade --wait --install jaeger jaegertracing/jaeger \
+		-n sandbox \
+		-f setup/jaeger.yaml
 
 	$(HELM) upgrade --wait --install grafana grafana-community/grafana \
   	-n sandbox \
@@ -140,11 +166,15 @@ setup: ns ## Prepare the cluster
 
 	$(KUBECTL) apply -n sandbox -f setup/collector.yaml
 
-	## Patch the Grafana and AKHQ services to use NodePort with the specified ports
+	## patch Grafana, AKHQ, and Jaeger services to use NodePort with fixed ports
 	$(KUBECTL) -n sandbox patch svc grafana --type merge -p '{"spec":{"type":"NodePort"}}'
 	$(KUBECTL) -n sandbox patch svc grafana --type json -p='[{"op":"replace","path":"/spec/ports/0/nodePort","value":$(GRAFANA_NODEPORT)}]'
 	$(KUBECTL) -n sandbox patch svc akhq --type merge -p '{"spec":{"type":"NodePort"}}'
 	$(KUBECTL) -n sandbox patch svc akhq --type json -p='[{"op":"replace","path":"/spec/ports/0/nodePort","value":$(AKHQ_NODEPORT)}]'
+
+	# extra fragile but fine for a sand castle
+	$(KUBECTL) -n sandbox patch svc jaeger --type merge -p '{"spec":{"type":"NodePort"}}'
+	$(KUBECTL) -n sandbox patch svc jaeger --type json -p='[{"op":"replace","path":"/spec/ports/10/nodePort","value":$(JAEGER_NODEPORT)}]'
 
 .PHONY: cluster
 cluster: .state/disks/$(CLUSTER) ## Create the Talos cluster

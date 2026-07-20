@@ -1,0 +1,25 @@
+allInOne:
+  enabled: true
+  extraEnv:
+    - name: COLLECTOR_OTLP_ENABLED
+      value: "true"
+
+storage:
+  type: memory
+
+provisionDataStore:
+  cassandra: false
+  elasticsearch: false
+  kafka: false
+
+agent:
+  enabled: false
+
+collector:
+  enabled: false
+
+query:
+  enabled: false
+
+ingester:
+  enabled: false

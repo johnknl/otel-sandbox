@@ -24,8 +24,12 @@ spec:
     exporters:
       debug:
         verbosity: detailed
-      otlp:
+      otlp/tempo:
         endpoint: tempo:4317
+        tls:
+          insecure: true
+      otlp/jaeger:
+        endpoint: jaeger:4317
         tls:
           insecure: true
 
@@ -37,7 +41,8 @@ spec:
             - memory_limiter
             - batch
           exporters:
-            - otlp
+            - otlp/tempo
+            - otlp/jaeger
             - debug
 
 ---

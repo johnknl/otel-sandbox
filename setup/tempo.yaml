@@ -1,5 +1,6 @@
 tempo:
-  reportingEnabled: false
+  reportingEnabled: true
+  streamOverHttpEnabled: true
 
 storage:
   trace:
@@ -9,4 +10,4 @@ persistence:
   enabled: false
 
 tempoQuery:
-  enabled: false
+  enabled: true

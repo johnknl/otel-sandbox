@@ -30,6 +30,12 @@ import (
 	"github.com/segmentio/kafka-go"
 )
 
+const (
+	topic    = "a-topic"
+	groupID  = "consumer-group"
+	maxBytes = 10 << 20 // 10MB
+)
+
 var logger *slog.Logger
 
 func init() {
@@ -43,9 +49,9 @@ func main() {
 
 	r := kafka.NewReader(kafka.ReaderConfig{
 		Brokers:  []string{"kafka-otel-sandbox-kafka-bootstrap:9092"},
-		Topic:    "a-topic",
-		GroupID:  "consumer-group",
-		MaxBytes: 10 << 20, // 10MB
+		Topic:    topic,
+		GroupID:  groupID,
+		MaxBytes: maxBytes,
 	})
 
 	defer func() {
@@ -54,6 +60,7 @@ func main() {
 		}
 	}()
 
+	logger.DebugContext(ctx, "starting consumer", "topic", topic, "groupID", groupID)
 	for {
 		m, err := r.FetchMessage(ctx)
 		if err != nil {

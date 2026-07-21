@@ -68,7 +68,27 @@ func main() {
 			os.Exit(1)
 		}
 
-		logger.DebugContext(ctx, string(m.Value), "topic", m.Topic, "partition", m.Partition, "offset", m.Offset)
+		var traceParent string
+
+		for _, h := range m.Headers {
+			if h.Key == "traceparent" {
+				traceParent = string(h.Value)
+				break
+			}
+		}
+
+		logger.DebugContext(
+			ctx,
+			string(m.Value),
+			slog.String("topic", m.Topic),
+			slog.Int("partition", m.Partition),
+			slog.Int64("offset", m.Offset),
+			// this is not the proper otel way to propagate the trace context
+			// it's just for me to easily see the traceparent of the sender
+			// to debug the tracing itself, as apposed to the thing it is tracing
+			// without having to inspect the kafka message manually
+			slog.String("x-traceparent", traceParent),
+		)
 
 		if err := r.CommitMessages(ctx, m); err != nil {
 			logger.ErrorContext(ctx, "failed to commit message", "err", err)

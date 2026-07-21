@@ -34,6 +34,24 @@ graph TD
   OCOL -->|exports| J
 ```
 
+### Sandbox Service Test Flow
+
+```mermaid
+sequenceDiagram
+  autonumber
+  participant FE as frontend
+  participant BE as backend
+  participant K as Kafka
+  participant C as consumer
+
+  FE->>BE: gRPC request
+  BE->>K: publish message
+  BE-->>FE: gRPC response
+
+  C->>K: fetch message
+```
+
+
 ## eBPF auto-instrumentation findings
 
 ### Wall clock shenanigans
@@ -67,25 +85,33 @@ Current contrived flow:
 - `backend` responds to `frontend`, and also publishes a Kafka message
 - `consumer` reads and logs the Kafka message (arguably out-of-band)
 
-Observations so far (WiP):
+This is what we want to see in Jaeger and Tempo respectively:
 
-- the span `backend -> consumer` is sporadically added a root frontend trace 
-  but when it isn't it does not start a new trace either
-  (seems like parent span is closed depending on timings because of async)
-- the span `frontend -> backend` stops being collected a couple of minutes
-  after a cold boot of the cluster
+![Jaeger Happy Flow](./images/ok-jaeger.png)
+![Tempo Happy Flow](./images/ok-tempo.png)
 
-```mermaid
-sequenceDiagram
-  autonumber
-  participant FE as frontend
-  participant BE as backend
-  participant K as Kafka
-  participant C as consumer
+### Observations
 
-  FE->>BE: gRPC request
-  BE->>K: publish message
-  BE-->>FE: gRPC response
+1. all `backend` spans stop being collected a couple of minutes
+  after a cold boot of the cluster -- restarting the backend restores that
+  for a short while
 
-  C->>K: fetch message
-```
+![Dead Backend](./images/backend-dead.png)
+
+2. things can get very confused with messed up parent/child relations
+  and traces being "incomplete".
+
+![Confused](./images/confused.png)
+![Confused](./images/incomplete.png)
+![Confused](./images/incomplete-2.png)
+
+### Context
+
+- the fontend is auto-instrumented, _but_ it manually starts the first trace
+  (`service.call_backend`)
+- the frontend gRPC is *not* using the `otelgrpc` interceptor
+- it is the auto-instrumentation which manages to _consistently_ create the
+  grpc child span
+- the second observation looks like infrastructure failure although obvious
+  culprits (sidecar, `backend`, collector) all seem fine
+- the Kafka messages produced by `backend` correctly have a `traceparent` header

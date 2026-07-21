@@ -31,6 +31,7 @@ import (
 	"github.com/jaswdr/faker"
 	pb "github.com/johnknl/otel-sandbox/pkg/protogen/backend/v1"
 	"go.opentelemetry.io/otel"
+	"go.opentelemetry.io/otel/codes"
 
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
@@ -71,6 +72,7 @@ func main() {
 
 		ctx, span := tracer.Start(ctx, "service.call_backend")
 
+		// Note no gRPC interceptor
 		resp, err := client.GetMessage(ctx, &pb.GetMessageRequest{
 			Name: fake.Person().Name(),
 			Id:   v7.String(),
@@ -79,9 +81,13 @@ func main() {
 		span.End()
 
 		if err != nil {
-			logger.ErrorContext(ctx, "failed to call backend", "error", err)
-		} else {
-			logger.DebugContext(ctx, "received response from backend", "message", resp.Message)
+			span.RecordError(err)
+			span.SetStatus(codes.Error, err.Error())
+
+			logger.ErrorContext(ctx, "failed to call backend", slog.String("err", err.Error()))
+			return
 		}
+
+		logger.DebugContext(ctx, "received response from backend", slog.String("message", resp.Message))
 	}
 }

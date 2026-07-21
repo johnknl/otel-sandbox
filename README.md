@@ -2,8 +2,24 @@
 
 Personal playground for OTEL Go auto-instrumentation.
 
-_Disclaimer: this repo is intentionally permanently a work in progress, 
-sometimes intentionally shitty, and not to be used as an example of how to do anything._
+> [!CAUTION]
+> _This repo is intentionally permanently a work in progress, 
+> sometimes intentionally shitty, and not to be used as an example of how to do anything._
+
+> [!IMPORTANT]
+The [opentelemetry-go-instrumentation](https://github.com/open-telemetry/opentelemetry-go-instrumentation) 
+project, while not explicitly marked as "experimental", is noted to be a "work in progress"
+and has no stable release.
+
+## TL;DR
+This sandcastle concludes that while the Go eBPF auto-instrumentation is interesting,
+it seems to suffer from fragility possibly inherent to it's design, which relies on
+memory layouts and goroutine mapping. Further investigation might reveal ways around
+some of these issues but this is mostly a usability check.
+
+While in its current state it is useful for gathering timings of network calls,
+for its primary use case of distributed tracing it appears insufficiently reliable.
+I would still highly recommend manual tracing using the SDK where this is an option.
 
 ## Sandbox Architecture
 
@@ -105,6 +121,9 @@ This is what we want to see in Jaeger and Tempo respectively:
 ![Confused](./images/incomplete.png)
 ![Confused](./images/incomplete-2.png)
 
+3. things _can_ work correctly - whether those are lucky flukes or if it can
+  be made stable is the question
+
 ### Context
 
 - the fontend is auto-instrumented, _but_ it manually starts the first trace
@@ -115,3 +134,16 @@ This is what we want to see in Jaeger and Tempo respectively:
 - the second observation looks like infrastructure failure although obvious
   culprits (sidecar, `backend`, collector) all seem fine
 - the Kafka messages produced by `backend` correctly have a `traceparent` header
+
+Note that `backend` stats a span and then _intentionally_ relies on the auto-instrumentation
+to propagate that context (`services/backend/main.go`):
+
+```go
+	// Check: we do not use the created context but because the auto-instrumentation uses goroutine
+	// mapping to propagate the span context, the below Kafka MAY still become a child span of the GetMessage span.
+	_, span := tracer.Start(ctx, "service.generate_message")
+	defer span.End()
+```
+
+We can clearly see in the happy path that this at least actually works are expected (`a-topic publish` is 
+implicitly a child of `service.generate_message`).

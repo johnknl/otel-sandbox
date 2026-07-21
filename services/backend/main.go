@@ -40,6 +40,8 @@ import (
 	"google.golang.org/grpc"
 )
 
+var manualSpansEnabled = os.Getenv("OTEL_MANUAL_SPANS_ENABLED") == "true"
+
 type server struct {
 	pb.UnimplementedBackendServiceServer
 	writer *kafka.Writer
